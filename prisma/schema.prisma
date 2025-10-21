@@ -1,0 +1,417 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./prisma/dev.db"
+}
+
+// ============================================
+// USER & AUTHENTICATION
+// ============================================
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  name          String?
+  passwordHash  String?
+  
+  // OAuth
+  googleId      String?   @unique
+  githubId      String?   @unique
+  
+  // Subscription
+  plan          String    @default("free") // free, pro, enterprise
+  testsCreated  Int       @default(0)
+  
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  
+  // Relations
+  tests         Test[]
+  
+  @@index([email])
+}
+
+// ============================================
+// TEST (PARENT ENTITY)
+// ============================================
+
+model Test {
+  id            String     @id @default(cuid())
+  userId        String
+  name          String
+  status        TestStatus @default(DRAFT)
+  
+  // Product info - comprehensive data structure for production
+  productInfo   Json       // Full ProductInfo object with all fields
+  validationGoals Json     // ValidationGoal[]
+  
+  // Timestamps
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+  
+  // Relations
+  user          User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  survey        Survey?
+  audiences     Audience[]
+  responses     Response[]
+  surveyResponses SurveyResponse[] // NEW: Individual synthetic responses
+  simulation    Simulation?
+  analysis      Analysis?
+  
+  @@index([userId])
+  @@index([status])
+}
+
+enum TestStatus {
+  DRAFT           // Initial creation
+  SURVEY_BUILDING // Building questions
+  AUDIENCE_SETUP  // Defining audiences
+  READY_TO_RUN    // Ready for simulation
+  RUNNING         // Simulation in progress
+  ANALYZING       // Analysis in progress
+  COMPLETED       // All done
+  ARCHIVED        // User archived it
+}
+
+// ============================================
+// SURVEY / QUESTIONNAIRE
+// ============================================
+
+model Survey {
+  id            String   @id @default(cuid())
+  testId        String   @unique
+  test          Test     @relation(fields: [testId], references: [id], onDelete: Cascade)
+  
+  // Survey content
+  sections      Json     // QuestionSection[]
+  settings      Json     // SurveySettings
+  
+  // Distribution
+  publicLink    String   @unique
+  embedCode     String
+  qrCodeUrl     String?
+  
+  // Collection settings
+  responseLimit Int?
+  closeDate     DateTime?
+  requireAuth   Boolean  @default(false)
+  allowAnonymous Boolean @default(true)
+  
+  // Stats
+  views         Int      @default(0)
+  starts        Int      @default(0)
+  completions   Int      @default(0)
+  avgTimeSeconds Int     @default(0)
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  @@index([publicLink])
+}
+
+// ============================================
+// SIMULATION (BACKGROUND PROCESSING)
+// ============================================
+
+model Simulation {
+  id              String   @id @default(cuid())
+  testId          String   @unique
+  test            Test     @relation(fields: [testId], references: [id], onDelete: Cascade)
+  
+  // Simulation Config
+  config          Json     // { sampleSize, mode: 'synthetic' | 'real' }
+  
+  // Generated Data
+  syntheticResponses Json  // Array of synthetic response objects
+  
+  // Status
+  status          String   // 'queued' | 'running' | 'completed' | 'failed'
+  progress        Int      @default(0)
+  
+  startedAt       DateTime?
+  completedAt     DateTime?
+  
+  createdAt       DateTime @default(now())
+  
+  @@index([testId])
+}
+
+// ============================================
+// AUDIENCE SEGMENTS
+// ============================================
+
+model Audience {
+  id            String   @id @default(cuid())
+  testId        String
+  test          Test     @relation(fields: [testId], references: [id], onDelete: Cascade)
+  
+  name          String
+  isPrimary     Boolean  @default(false)
+  
+  // Demographics
+  demographics  Json     // { age, gender, ethnicity, income, education, location, geography }
+  psychographics Json?   // { values, lifestyle, painPoints }
+  
+  // Sizing
+  estimatedSize Int      // TAM estimate
+  targetSampleSize Int   // How many responses to collect
+  reasoning     String? // Why AI suggested this audience
+  
+  createdAt     DateTime @default(now())
+  
+  // Relations
+  surveyResponses SurveyResponse[]
+  
+  @@index([testId])
+}
+
+// ============================================
+// SURVEY RESPONSES (REAL DATA)
+// ============================================
+
+model Response {
+  id            String         @id @default(cuid())
+  testId        String
+  test          Test           @relation(fields: [testId], references: [id], onDelete: Cascade)
+  
+  surveyId      String
+  respondentId  String?        // If authenticated
+  
+  // Response data
+  answers       Json           // { questionId: string, value: any }[]
+  
+  // Metadata
+  metadata      Json           // { startTime, endTime, userAgent, ipAddress, location }
+  
+  status        ResponseStatus
+  
+  timeSpent     Int?           // seconds
+  
+  createdAt     DateTime       @default(now())
+  startedAt     DateTime?
+  completedAt   DateTime?
+  
+  @@index([testId])
+  @@index([surveyId])
+  @@index([status])
+}
+
+enum ResponseStatus {
+  STARTED
+  COMPLETED
+  ABANDONED
+  FLAGGED
+}
+
+// ============================================
+// SURVEY RESPONSES (SYNTHETIC DATA)
+// ============================================
+
+model SurveyResponse {
+  id            String   @id @default(cuid())
+  testId        String
+  audienceId    String?
+  
+  // Response data
+  responseData  Json     // All question answers with structured data
+  demographics  Json     // Age, gender, income, location, etc.
+  psychographics Json    // Motivations, values, lifestyle, etc.
+  behaviors     Json     // Usage patterns, channel preferences, etc.
+  
+  // Calculated metrics
+  purchaseIntent Int     // 0-100 scale
+  priceAcceptance Json   // Price sensitivity data
+  brandFit      Float    // 0-10 scale
+  featurePreferences Json // Feature rankings and preferences
+  
+  // Metadata
+  metadata      Json     // Device, time taken, completion rate, etc.
+  
+  createdAt     DateTime @default(now())
+  
+  test     Test     @relation(fields: [testId], references: [id], onDelete: Cascade)
+  audience Audience? @relation(fields: [audienceId], references: [id])
+  
+  @@index([testId])
+  @@index([audienceId])
+  @@index([purchaseIntent])
+}
+
+// ============================================
+// ANALYSIS RESULTS
+// ============================================
+
+model Analysis {
+  id            String   @id @default(cuid())
+  testId        String   @unique
+  test          Test     @relation(fields: [testId], references: [id], onDelete: Cascade)
+  
+  // Core Results
+  purchaseIntent Json    // PurchaseIntentAnalysis
+  patterns      Json     // Pattern[]
+  pricing       Json?    // PricingAnalysis
+  brand         Json?    // BrandAnalysis
+  culturalRisks Json     // CulturalRisk[]
+  segments      Json     // SegmentAnalysis[]
+  insights      Json     // Insight[]
+  
+  // NEW: Comprehensive Analytics
+  maxDiffResults  Json?    // Feature prioritization analysis
+  kanoResults     Json?    // Feature satisfaction categorization
+  conjointResults Json?    // Trade-off analysis
+  turfResults     Json?    // Reach & frequency analysis
+  messageResults  Json?    // Message testing results
+  journeyMap      Json?    // Customer journey analysis
+  brandMap        Json?    // Brand positioning map
+  competitiveMap  Json?    // Competitive landscape analysis
+  crossTabs       Json?    // Demographic cross-tabulations
+  funnelAnalysis  Json?    // Purchase funnel analysis
+  verbatims       Json?    // Coded open-ended responses
+  channelStrategy Json?    // Channel recommendations
+  launchReadiness Json?    // Go/No-Go scorecard
+  
+  // Executive summary
+  executiveSummary Json  // ExecutiveSummary
+  keyFindings   Json     // KeyFinding[]
+  
+  // Metadata
+  sampleSize    Int
+  dataMode      String   // 'real' | 'synthetic' | 'hybrid'
+  confidence    Float
+  
+  // Launch recommendation
+  shouldLaunch  Boolean?
+  launchConfidence Float?
+  launchReasoning String?
+  
+  processedAt   DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  // Relations
+  personas      Persona[]
+  recommendations Recommendation[]
+}
+
+// ============================================
+// PERSONAS (FOR CHAT)
+// ============================================
+
+model Persona {
+  id            String   @id @default(cuid())
+  analysisId    String
+  analysis      Analysis @relation(fields: [analysisId], references: [id], onDelete: Cascade)
+  
+  // Identity
+  name          String
+  avatar        String   // URL or emoji
+  age           Int
+  archetype     String   // "The Informed Skeptic"
+  
+  // Demographics
+  demographics  Json     // Full demographic profile
+  
+  // Survey-based data
+  surveyData    Json     // Purchase intent, concerns, motivations, etc.
+  
+  // Psychographics
+  psychographics Json    // Values, lifestyle, pain points, aspirations
+  
+  // Personality
+  personality   Json     // Speaking style, tone, keywords
+  
+  // AI context
+  systemPrompt  String
+  
+  // Relations
+  chatMessages  ChatMessage[]
+  
+  createdAt     DateTime @default(now())
+  
+  @@index([analysisId])
+}
+
+// ============================================
+// CHAT MESSAGES
+// ============================================
+
+model ChatMessage {
+  id            String   @id @default(cuid())
+  personaId     String
+  persona       Persona  @relation(fields: [personaId], references: [id], onDelete: Cascade)
+  
+  conversationId String? // Group messages by conversation
+  
+  role          String   // 'user' | 'assistant'
+  content       String
+  
+  // Extracted insights
+  insights      Json?    // Auto-detected insights
+  highlighted   Boolean  @default(false)
+  tags          Json?    // Category tags
+  
+  createdAt     DateTime @default(now())
+  
+  @@index([personaId])
+  @@index([conversationId])
+}
+
+// ============================================
+// RECOMMENDATIONS
+// ============================================
+
+model Recommendation {
+  id            String   @id @default(cuid())
+  analysisId    String
+  analysis      Analysis @relation(fields: [analysisId], references: [id], onDelete: Cascade)
+  
+  category      String   // 'brand' | 'product' | 'pricing' | 'strategy' | 'geographic' | 'discontinue'
+  priority      String   // 'critical' | 'high' | 'medium' | 'low'
+  
+  title         String
+  description   String
+  reasoning     String
+  
+  // Supporting data
+  supportingData Json    // { insightIds, patternIds, metrics }
+  
+  // Actions
+  actions       Json     // Action[]
+  
+  // Expected outcome
+  expectedOutcome Json   // { metric, current, projected, lift }
+  
+  // Timeline
+  timeline      String?  // "Week 1-2", "Month 2-3"
+  difficulty    String?  // 'easy' | 'medium' | 'hard'
+  
+  createdAt     DateTime @default(now())
+  
+  @@index([analysisId])
+  @@index([category])
+}
+
+// ============================================
+// EXPORTS
+// ============================================
+
+model Export {
+  id            String   @id @default(cuid())
+  testId        String
+  
+  type          String   // 'pdf' | 'csv' | 'notion' | 'transcript'
+  format        String
+  
+  fileUrl       String?
+  status        String   // 'pending' | 'completed' | 'failed'
+  
+  createdAt     DateTime @default(now())
+  completedAt   DateTime?
+  
+  @@index([testId])
+}

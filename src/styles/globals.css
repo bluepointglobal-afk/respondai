@@ -1,0 +1,119 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Light theme (default) */
+    --bg-primary: 255 255 255;
+    --bg-secondary: 248 249 250;
+    --bg-tertiary: 241 243 245;
+    --bg-elevated: 255 255 255;
+    
+    --text-primary: 26 26 26;
+    --text-secondary: 74 85 104;
+    --text-tertiary: 113 128 150;
+    
+    --border-primary: 226 232 240;
+    --border-secondary: 203 213 224;
+    
+    /* Radix UI Select variables */
+    --popover: 255 255 255;
+    --popover-foreground: 26 26 26;
+    --background: 255 255 255;
+    --foreground: 26 26 26;
+    --muted: 248 249 250;
+    --muted-foreground: 113 128 150;
+    --accent: 248 249 250;
+    --accent-foreground: 26 26 26;
+    --ring: 147 51 234;
+  }
+  
+  .dark {
+    /* Dark theme */
+    --bg-primary: 12 13 18;
+    --bg-secondary: 24 24 27;
+    --bg-tertiary: 39 39 42;
+    --bg-elevated: 39 39 42;
+    
+    --text-primary: 244 244 245;
+    --text-secondary: 161 161 170;
+    --text-tertiary: 113 113 122;
+    
+    --border-primary: 63 63 70;
+    --border-secondary: 82 82 91;
+    
+    /* Radix UI Select variables (dark) */
+    --popover: 39 39 42;
+    --popover-foreground: 244 244 245;
+    --background: 12 13 18;
+    --foreground: 244 244 245;
+    --muted: 39 39 42;
+    --muted-foreground: 113 113 122;
+    --accent: 39 39 42;
+    --accent-foreground: 244 244 245;
+    --ring: 147 51 234;
+  }
+  
+  body {
+    @apply bg-light-bg-primary dark:bg-dark-bg-primary;
+    @apply text-light-text-primary dark:text-dark-text-primary;
+    @apply transition-colors duration-200;
+    font-feature-settings: 'rlig' 1, 'calt' 1;
+  }
+  
+  /* Custom scrollbar */
+  ::-webkit-scrollbar {
+    width: 10px;
+  }
+  
+  ::-webkit-scrollbar-track {
+    @apply bg-light-bg-secondary dark:bg-dark-bg-secondary;
+  }
+  
+  ::-webkit-scrollbar-thumb {
+    @apply bg-light-border-secondary dark:bg-dark-border-secondary;
+    @apply rounded-full;
+  }
+  
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-primary-500;
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+  
+  /* Theme-aware backgrounds */
+  .bg-card {
+    @apply bg-light-bg-elevated dark:bg-dark-bg-elevated;
+    @apply border border-light-border-primary dark:border-dark-border-primary;
+  }
+  
+  .bg-input {
+    @apply bg-light-bg-tertiary dark:bg-dark-bg-tertiary;
+    @apply border border-light-border-primary dark:border-dark-border-primary;
+  }
+  
+  /* Theme-aware text */
+  .text-primary {
+    @apply text-light-text-primary dark:text-dark-text-primary;
+  }
+  
+  .text-secondary {
+    @apply text-light-text-secondary dark:text-dark-text-secondary;
+  }
+  
+  .text-tertiary {
+    @apply text-light-text-tertiary dark:text-dark-text-tertiary;
+  }
+  
+  /* Gradient text */
+  .text-gradient {
+    @apply bg-gradient-to-r from-primary-500 to-accent-purple;
+    @apply bg-clip-text text-transparent;
+  }
+}
+
